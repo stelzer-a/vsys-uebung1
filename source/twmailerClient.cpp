@@ -1,19 +1,22 @@
 #include "../header/twmailerClient.h"
+#include "../header/Client.h"
+
+// Usage-Fehlermeldung
+void print_usage(char* program_name) {
+	fprintf(stderr, "Usage: %s [-p  Port] [-i IP-Address]\n", program_name);
+	exit(1);
+}
 
 int main (int argc, char *argv[]) {
-  	int create_socket;
-  	char buffer[BUF];
-  	struct sockaddr_in address;
-  	int size;
 	int server_port;
 	char* server_addr;
 
-	/* Prüfen, ob die richtige Anzahl an Kommandozeilenparametern eingegeben wurde */
+	// Prüfen, ob die richtige Anzahl an Kommandozeilenparametern eingegeben wurde
 	if(argc != 5) {
 		print_usage(argv[0]);
 	}
 
-	/* Lesen der Kommandozeilenparameter */
+	// Lesen der Kommandozeilenparameter
 	int c;
 	int pOption = 0;
 	int iOption = 0;
@@ -38,48 +41,34 @@ int main (int argc, char *argv[]) {
 		}
 	}
 
-	/* Prüfen, ob ein Argument öfter vorgekommen ist */
+	// Prüfen, ob ein Argument öfter vorgekommen ist
 	if(pOption > 1 || iOption > 1) {
 		print_usage(argv[0]);
 	}
 
-	/* TCP-Socket erstellen */
-  	if ((create_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-		perror("Socket error");
-     		return EXIT_FAILURE;
+	// Client erstellen und initialisieren
+	Client client;
+	if ((client.init(server_addr, server_port)) == -1) {
+		perror("Connect error - socket could not be created");
+     	return EXIT_FAILURE;
 	}
 
-	/* Server-Addresse befüllen */
-  	memset(&address, 0, sizeof(address));
-  	address.sin_family = AF_INET;
-  	address.sin_port = htons(server_port);
-  	inet_aton(server_addr, &(address.sin_addr));
+	// Mit Server verbinden und Willkommensnachricht empfangen
+	if ((client.connectToServer()) == -1) {
+		perror("Connect error - no server available");
+     	return EXIT_FAILURE;
+	} else {
+		printf("Connection with server established\n");
+		if ((client.receive()) == -1) {
+			perror("Error receiving message\n");
+		}
+	}
 
-	/* Mit Server verbinden */
-  	if (connect(create_socket, (struct sockaddr *) &address, sizeof(address)) == 0) {
-     		printf("Connection with server (%s) established\n", inet_ntoa(address.sin_addr));
-     		size = recv(create_socket, buffer, BUF-1, 0);
-     
-		if (size > 0) {
-        		buffer[size]= '\0';
-        		printf("%s", buffer);
-     		}
-  	} else {
-     		perror("Connect error - no server available");
-     		return EXIT_FAILURE;
-  	}
+	// Kommandoeingabe-Schleife beginnen
+	client.send_cmd();
 
-	/* Schleife für Senden von Befehlen an den Server */
-  	do {
-     		/*printf("Send message: ");
-     		fgets(buffer, BUF, stdin);
-     		send(create_socket, buffer, strlen (buffer), 0);*/
-		send_cmd(buffer, BUF-1);
-		printf("%s", buffer);
-  	} while(strcmp(buffer, "quit\n") != 0);
-  
-	/* Socket schließen */
-	close (create_socket);
+	// Verbindung zum Server trennen
+	client.disconnect();
 
 	return EXIT_SUCCESS;
 }

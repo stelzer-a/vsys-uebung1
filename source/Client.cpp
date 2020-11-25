@@ -89,7 +89,7 @@ void Client::send_cmd() {
 			memset(comm, 0, strlen(comm));
 		}
 
-    } while (strcmp(comm, "quit\n.\n"));
+    } while (strncmp(comm, "quit", 4));
 
     // Allozierten Speicher freigeben
 	free(line);

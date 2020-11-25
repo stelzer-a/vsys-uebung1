@@ -1,4 +1,3 @@
-#include "../header/twmailerClient.h"
 #include "../header/Client.h"
 
 // Usage-Fehlermeldung

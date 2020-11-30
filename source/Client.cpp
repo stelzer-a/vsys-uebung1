@@ -61,11 +61,12 @@ void Client::send_cmd() {
 	char* line = NULL;
 	size_t comm_len = BUF * sizeof(char);
 	char* comm = (char*) malloc(comm_len);
+	char* msg_length = (char*) malloc(sizeof(uint32_t));
 
     // Es können solange Befehle eingegeben werden, bis "quit\n.\n" eingegeben wird
     do {
         // Eingegebenen Befehl auslesen 
-		printf("Enter your command below:\n");
+		printf("\nEnter your command below:\n");
 
 		// Befehl Zeile für Zeile auslesen, bis ".\n" eingegeben wird
 		do {
@@ -74,17 +75,32 @@ void Client::send_cmd() {
 					printf("Command is too large!\n");
                     free(line);
                     free(comm);
+					free(msg_length);
 					return;
 				} else {
 					comm = strncat(comm, line, strlen(line) + 1);
 				}
-		} while (strcmp(line, ".\n"));
+		} while (strcmp(line, ".\n") != 0);
 
-		// Zu Debugzwecken comm ausgeben
-		printf("%s\n", comm);
+		// Befehlsstring nullterminieren
+		comm[strlen(comm)+1] = '\0';
+
+		// Länge des Befehlsstrings an den Server senden
+		uint32_t msg_size = strlen(comm);
+
+		sprintf(msg_length, "%d", msg_size);
+		// send(client_socket, msg_length, sizeof(uint32_t), 0);
+		send_all(client_socket, msg_length, sizeof(uint32_t));
+
+		// Befehlsstring an den Server senden
+		// send(client_socket, comm, strlen(comm), 0);
+		send_all(client_socket, comm, strlen(comm));
+
+		// Antwort vom Server empfangen
+		receive();
 
         // Befehlsstring zurücksetzen
-        if (strcmp(comm, "quit\n.\n")) {
+        if (strcasecmp(comm, "quit\n.\n") != 0) {
 			// comm-String zurücksetzen
 			memset(comm, 0, strlen(comm));
 		}
@@ -94,6 +110,7 @@ void Client::send_cmd() {
     // Allozierten Speicher freigeben
 	free(line);
 	free(comm);
+	free(msg_length);
 }
 
 // char* receive(Buffer)

@@ -1,3 +1,6 @@
+#ifndef TWMAILER_SERVER
+#define TWMAILER_SERVER
+
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <netinet/in.h>
@@ -9,13 +12,23 @@
 #include <dirent.h>
 #include <errno.h>
 
-#define BUF 1024
+#include "Mail.h"
+#include "../util/util.h"
+
+#define BUF 5
+#define HEADER_BYTES 4
+#define MAX_USERID_SIZE 8
+#define MAX_SUBJECT_SIZE 80
+#define OK_STRING "OK\n"
+#define ERR_STRING "ERR\n"
 
 class Server {
     private:
         // Membervariablen
         char* maildir;
         char* recv_buffer;
+        char* cmd_string;
+        int buffer_size;
 
         // Membervariablen -- Sockets
         int listen_socket, client_socket;
@@ -23,6 +36,13 @@ class Server {
         socklen_t sock_addr_len;
 
         int acceptClient();
+        int parseCmd();
+
+        // Handle Befehl Funktionen
+        int handleSend();
+        int handleList();
+        int handleRead();
+        int handleDel();
     public:
         // Konstruktor und Destruktor
         Server();
@@ -32,6 +52,8 @@ class Server {
         int start();
         void stop();
 
-        int send_msg(char* msg);
+        void send_msg(char* msg);
         void recv_cmd();
 };
+
+#endif

@@ -1,3 +1,6 @@
+#ifndef TWMAILER_CLIENT
+#define TWMAILER_CLIENT
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -5,6 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+#include "../util/util.h"
 
 #define BUF 1024
 
@@ -30,3 +35,5 @@ class Client {
         int receive();
 
 };
+
+#endif

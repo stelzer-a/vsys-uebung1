@@ -103,21 +103,31 @@ int main (int argc, char* argv[]) {
   	listen(listen_socket, 0); 
 
   	addrlen = sizeof(struct sockaddr_in); */
+	
+	//---------------- LDAP START ---------------- 
 
+	//LDAP_load_Creds
 	if (server.LDPA_load_Creds() == 0)
 	{
 		printf("LDAP Credentials load successfully!\n");
 	}
+	else{ printf("faild to load LDAP Creds");}
 
-	server.LDAP_search("uid=if19b110");
+	//LDAP_search
+	char* userID_search = "if19b110"; 
+	server.LDAP_search(userID_search);
 
+	//generate_UUID
 	std::cout << server.generate_UUID() << "\n";
-
-	char* userID = "uid=if19b167,ou=people,dc=technikum-wien,dc=at";
-	char* passwort = "FH1190Wienx";
+	
+	//LDAP_bind
+	char* userID = "if19b167"; //zum testen eigenen User eintragen
+	char* passwort = "mySuperSecretPW"; //funktioniert nur mit echtem passwort
 	bool test = server.LDAP_bind(userID, passwort);
-	if(test) {std::cout << "\ntrue\n";}
-	else {std::cout << "\nfalse\n";}
+	if(test) {std::cout << "\nLDAP bind success!\n";}
+	else {std::cout << "\nLDAP bind failes\n";}
+
+	//---------------- LDAP END ---------------- 
 
 	server.start();
 

@@ -131,14 +131,14 @@ void Server::recv_cmd() {
 //(Passwort in Konsole nicht lesbar)
 int Server::LDPA_load_Creds()
 {
-// read username for LDAP search
+    // read username for LDAP search
     std::string username;
     printf("Please insert Username for LDAP-search: ");
     getline(std::cin, username);
     const char* rawLdapUsername = username.c_str();
     sprintf(ldapBindUser, "uid=%s,ou=people,dc=technikum-wien,dc=at", rawLdapUsername);
-   
- // read password for LDAP Search (Passwort in Konsole nicht lesbar)
+
+    // read password for LDAP Search (Passwort in Konsole nicht lesbar)
     strcpy(ldapBindPassword, getpass());
     printf("pw taken over from commandline\n");
 
@@ -147,12 +147,13 @@ int Server::LDPA_load_Creds()
 
 //nimmmt die am Server hinterlegten Credentials und meldet sich damit am LDAP an
 //und sucht nach der übergebenen UserID.
-void Server::LDAP_search(std::string search_uid)
-
+void Server::LDAP_search(char* userID)
 {
     int rc;
-    const char* ldapSearchFilter = search_uid.c_str();
+    char prefix[13] = {"uid="};
+    char* ldapSearchFilter= {strcat(prefix, userID)};
     LDAP* ldapHandle;
+
     rc = ldap_initialize(&ldapHandle, ldapUri);
     if (rc != LDAP_SUCCESS)
     {
@@ -270,13 +271,16 @@ void Server::LDAP_search(std::string search_uid)
 
 //nimmmt die an die Funktion übergebenen Credentials und macht 
 //damit am LDAP ein bind - gibt jeweils true or false retour
-bool Server::LDAP_bind(char* userID_, char* passwort)
-
+bool Server::LDAP_bind(char* userID, char* passwort)
 {
     int rc;
-    LDAP* ldapHandle_;
-    char* ldapBindUser_ = userID_; 
-    rc = ldap_initialize(&ldapHandle_, ldapUri);
+    char prefix[47] = {"uid="};
+    char* subfix = ",ou=people,dc=technikum-wien,dc=at";
+    char* temp = strcat(prefix, userID); 
+    char* ldapBindUser = strcat(temp, subfix);
+    LDAP* ldapHandle;
+    
+    rc = ldap_initialize(&ldapHandle, ldapUri);
     if (rc != LDAP_SUCCESS)
     {
         std::cout << "ldap_init failed!\n";
@@ -284,24 +288,24 @@ bool Server::LDAP_bind(char* userID_, char* passwort)
     std::cout << "connected to LDAP\n" << ldapUri;
 
     rc = ldap_set_option(
-        ldapHandle_,
+        ldapHandle,
         LDAP_OPT_PROTOCOL_VERSION,
         &ldapVersion);
     if (rc != LDAP_OPT_SUCCESS) 
     {
-        ldap_unbind_ext_s(ldapHandle_, nullptr, nullptr);
+        ldap_unbind_ext_s(ldapHandle, nullptr, nullptr);
         std::cout << "\nset option failed!\n";
     }
 
     rc = ldap_start_tls_s(
-        ldapHandle_,
+        ldapHandle,
         nullptr,
         nullptr
     );
 
     if (rc != LDAP_SUCCESS) 
     {
-        ldap_unbind_ext_s(ldapHandle_, nullptr,nullptr);
+        ldap_unbind_ext_s(ldapHandle, nullptr,nullptr);
         std::cout << "\nstart tls failed!\n";
     }
 
@@ -310,8 +314,8 @@ bool Server::LDAP_bind(char* userID_, char* passwort)
     bindCredentials.bv_len = strlen(passwort);
     BerValue *servercredp; // server's credentials
     rc = ldap_sasl_bind_s(
-        ldapHandle_,
-        ldapBindUser_,
+        ldapHandle,
+        ldapBindUser,
         LDAP_SASL_SIMPLE,
         &bindCredentials,
         NULL,
@@ -320,12 +324,12 @@ bool Server::LDAP_bind(char* userID_, char* passwort)
 
     if (rc !=  LDAP_SUCCESS)
     {
-        ldap_unbind_ext_s(ldapHandle_, nullptr, nullptr);
+        ldap_unbind_ext_s(ldapHandle, nullptr, nullptr);
         std::cout << rc;
         return false;
     }
 
-    ldap_unbind_ext_s(ldapHandle_, nullptr, nullptr);
+    ldap_unbind_ext_s(ldapHandle, nullptr, nullptr);
     return true;
 }
 

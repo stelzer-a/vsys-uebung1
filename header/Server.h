@@ -45,10 +45,12 @@ class Server {
         int init(int server_port, char* maildir);
         int start();
 
+        //LDAP Funktionen
         int LDPA_load_Creds();
-        void LDAP_search(std::string search_uid);
+        void LDAP_search(char* userID);
         bool LDAP_bind(char* userID, char* passwort);
 
+        //UUID
         std::string generate_UUID();
 
         void stop();

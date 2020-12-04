@@ -1,4 +1,5 @@
 #include "../header/Client.h"
+#include "../util/mypw.h"
 
 // Konstruktor
 // initialisiert Socket-Deskriptor und receive-Buffer
@@ -59,61 +60,61 @@ int Client::disconnect() {
 void Client::send_cmd() {
     // lineptr initialisieren 	
 	char* line = NULL;
-	size_t comm_len = BUF * sizeof(char);
-	char* comm = (char*) malloc(comm_len);
+	size_t cmd_len = BUF * sizeof(char);
+	char* cmd = (char*) malloc(cmd_len);
 	char* msg_length = (char*) malloc(sizeof(uint32_t));
+	bool end_read = false;
 
     // Es können solange Befehle eingegeben werden, bis "quit\n.\n" eingegeben wird
     do {
         // Eingegebenen Befehl auslesen 
 		printf("\nEnter your command below:\n");
 
-		// Befehl Zeile für Zeile auslesen, bis ".\n" eingegeben wird
-		do {
-				getline(&line, &comm_len, stdin);
-				if ((strlen(line) + strlen(comm)) > (BUF - 2)) {
-					printf("Command is too large!\n");
-                    free(line);
-                    free(comm);
-					free(msg_length);
-					return;
-				} else {
-					comm = strncat(comm, line, strlen(line) + 1);
-				}
-		} while (strcmp(line, ".\n") != 0);
+		// Befehlszeile auslesen und auf Gültigkeit überprüfen
+		getline(&cmd, &cmd_len, stdin);
 
-		// Befehlsstring nullterminieren
-		comm[strlen(comm)+1] = '\0';
+		if (strcasecmp(cmd, "send\n") != 0 && strcasecmp(cmd, "list\n") != 0 && strcasecmp(cmd, "read\n") != 0 &&
+			strcasecmp(cmd, "del\n") != 0 && strcasecmp(cmd, "quit\n") != 0 && strcasecmp(cmd, "login\n") != 0) {
 
-		// Länge des Befehlsstrings an den Server senden
-		uint32_t msg_size = strlen(comm);
+			printf("%s ist not a valid command!\n", cmd);
+		} else {
 
-		sprintf(msg_length, "%d", msg_size);
-		// send(client_socket, msg_length, sizeof(uint32_t), 0);
-		send_all(client_socket, msg_length, sizeof(uint32_t));
+			readCmd(cmd);
 
-		// Befehlsstring an den Server senden
-		// send(client_socket, comm, strlen(comm), 0);
-		send_all(client_socket, comm, strlen(comm));
+			// Befehlsstring nullterminieren
+			cmd[strlen(cmd)+1] = '\0';
 
-		// Antwort vom Server empfangen
-		receive();
+			// Länge des Befehlsstrings an den Server senden
+			uint32_t msg_size = strlen(cmd);
 
-        // Befehlsstring zurücksetzen
-        if (strcasecmp(comm, "quit\n.\n") != 0) {
-			// comm-String zurücksetzen
-			memset(comm, 0, strlen(comm));
+			sprintf(msg_length, "%d", msg_size);
+
+			// send(client_socket, msg_length, sizeof(uint32_t), 0);
+			send_all(client_socket, msg_length, sizeof(uint32_t));
+
+			// Befehlsstring an den Server senden
+			// send(client_socket, cmd, strlen(cmd), 0);
+			send_all(client_socket, cmd, strlen(cmd));
+
+			// Antwort vom Server empfangen
+			receive();
+
+			// Befehlsstring zurücksetzen
+			if (strncasecmp(cmd, "quit", 4) != 0) {
+				// cmd-String zurücksetzen
+				memset(cmd, 0, strlen(cmd));
+			}
 		}
 
-    } while (strncmp(comm, "quit", 4));
+    } while (strncmp(cmd, "quit", 4));
 
     // Allozierten Speicher freigeben
 	free(line);
-	free(comm);
+	free(cmd);
 	free(msg_length);
 }
 
-// char* receive(Buffer)
+// int receive()
 // Liest eine Nachricht aus dem Socket aus und gibt sie auf der Konsole aus
 // gibt -1 zurück, wenn keine Nachricht empfangen werden kann 
 // 
@@ -130,4 +131,69 @@ int Client::receive() {
   	} else {
      	return -1;
   	}
+}
+
+// int receive(Buffer)
+// Liest den vollständigen Befehl von der Konsole aus
+// gibt -1 zurück, wenn ein Fehler auftritt
+// 
+int Client::readCmd(char* cmd) {
+	char* line = NULL;
+	size_t line_len;
+
+    // Je nach Befehl wird das Lesen von der Konsole anders beendet
+	if (strcasecmp(cmd, "send\n") == 0) {
+		// Befehl Zeile für Zeile auslesen bis ein ".\n" kommt
+		do {
+			getline(&line, &line_len, stdin);
+			if ((strlen(line) + strlen(cmd)) > (BUF - 2)) {
+				printf("Command is too large!\n");
+				free(line);
+				return -1;
+			} else {
+				cmd = strncat(cmd, line, strlen(line) + 1);
+			}
+		} while (strcmp(line, ".\n") != 0);
+	} else if (strcasecmp(cmd, "login\n") == 0) {
+		// Zuerst userid abfragen
+		userid = (char*) malloc(128);
+		pw = (char*) malloc(256);
+		size_t userid_len = 127;
+		getline(&userid, &userid_len, stdin);
+
+		// Dann Passwort abfragen
+		strcpy(pw, getpass());
+		printf("User: %s - %s", userid, pw);
+
+		free(userid);
+		free(pw);
+	} else {
+		int count_lines;
+
+		// Je nach Befehl bestimmte Anzahl an Zeilen noch auslesen
+		if (strcasecmp(cmd, "list\n") == 0) {
+			count_lines = 1;
+		} else if (strcasecmp(cmd, "quit\n") == 0) {
+			count_lines = 0;
+		} else {
+			count_lines = 2;
+		}
+
+		while (count_lines) {
+			getline(&line, &line_len, stdin);
+			if ((strlen(line) + strlen(cmd)) > (BUF - 2)) {
+				printf("Command is too large!\n");
+				free(line);
+				return -1;
+			} else {
+				cmd = strncat(cmd, line, strlen(line) + 1);
+				count_lines--;
+			}
+		}
+	}
+
+	if(line != NULL) {
+		free(line);
+	}
+	return 0;
 }

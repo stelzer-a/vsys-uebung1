@@ -34,13 +34,12 @@ int Mail::saveToMaildir(char* maildir) {
     DIR* recipientDir = opendir(recipientDirString);
     if (recipientDir) {
 		// Das Verzeichnis existiert
-        printf("Userverzeichnis von %s existiert\n", recipient);
         saveMail(recipientDirString);
 
 	} else if (errno == ENOENT) {
 		// Verzeichnis existiert nicht, also erstellen
 		if (mkdir(recipientDirString, 0777) == 0) {
-            printf("Userverzeichnis von %s angelegt\n", recipient);
+            printf(" %s's directory was created\n", recipient);
             saveMail(recipientDirString);
 		} else {
 			printf("Error creating recipient's directory!\n");
@@ -79,7 +78,7 @@ int Mail::saveMail(char* dirString) {
         fprintf(newFile, "Subject  : %s\n\n", subject);
         fprintf(newFile, "%s", content);
     } else {
-        printf("Mail konnte nicht gespeichert werden!\n");
+        printf("Mail could not be saved!\n");
         free(filename);
         return -1;
     }

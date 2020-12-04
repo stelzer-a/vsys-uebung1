@@ -9,6 +9,7 @@ clean:
 	rm Client.o
 	rm Mail.o
 	rm util.o
+	rm mypw.o
 
 Client.o: Client.cpp
 	g++ -c Client.cpp
@@ -22,6 +23,9 @@ Mail.o: Mail.cpp
 util.o: util.cpp
 	g++ -c util.cpp
 
+mypw.o: mypw.cpp
+	g++ -c mypw.cpp
+
 twmailerClient.o: twmailerClient.cpp
 	g++ -c twmailerClient.cpp
 
@@ -29,8 +33,8 @@ twmailerServer.o: twmailerServer.cpp
 	g++ -c twmailerServer.cpp
 
 
-twmailerClient: twmailerClient.o Client.o util.o
-	g++ -o twmailerClient twmailerClient.o Client.o util.o
+twmailerClient: twmailerClient.o Client.o util.o mypw.o
+	g++ -o twmailerClient twmailerClient.o Client.o util.o mypw.o
 
 twmailerServer: twmailerServer.o Server.o Mail.o util.o
 	g++ -o twmailerServer twmailerServer.o Server.o Mail.o util.o

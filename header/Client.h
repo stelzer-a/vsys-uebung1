@@ -20,6 +20,11 @@ class Client {
         struct sockaddr_in srv_addr_struct;
         char* recv_buffer;
 
+        int readCmd(char* cmd);
+
+        char* userid;
+        char* pw;
+
     public:
         // Konstruktor und Destruktor
         Client();

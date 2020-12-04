@@ -149,6 +149,43 @@ void Server::recv_cmd() {
     } while (strncasecmp(cmd_string, "quit", 4) != 0 || msg_size == 0);
 }
 
+
+// int readSubject(Verzeichniseintrag, Zielstring)
+// Liest den Betreff aus einem Mail aus
+// gibt -1 zurück, wenn ein Fehler aufgetreten ist 
+//
+int Server::readSubject(struct dirent *dirp, char* path , char** subject) {
+    // Dateipfad erzeugen
+    char* file_path = (char*) malloc((strlen(path) + strlen(dirp->d_name) + 2) * sizeof(char));
+    sprintf(file_path, "%s/%s", path, dirp->d_name);
+
+    FILE* fptr;
+    if ((fptr = fopen(file_path, "r")) == NULL) {
+        printf("Error opening mail\n");
+        free(file_path);
+        return -1;
+    }
+
+    // Zeilen lesen bis Betreff eingelesen wurde
+    size_t subject_len;
+    ssize_t bytesRead;
+    do {
+        bytesRead = getline(subject, &subject_len, fptr);
+    } while(strncasecmp(*subject, "Subject", strlen("Subject")) != 0 && bytesRead != -1);
+
+    // Falls bis EOF kein Betreff eingelesen wurde
+    if (bytesRead == -1) {
+        free(file_path);
+        printf("Error no subject\n");
+        fclose(fptr);
+        return -1;
+    }
+
+    free(file_path);
+    fclose(fptr);
+    return 0;
+}
+
 // int parseCmd()
 // Liest den Befehl aus dem empfangenen String aus
 // gibt -1 zurück, wenn ein Fehler aufgetreten ist 
@@ -169,11 +206,18 @@ int Server::parseCmd() {
             printf("Error handling LIST command!\n");
             return -1;
         }
+        return 0;
     } else if (strcasecmp(cmd, "read") == 0) {
-        printf("Command %s is valid!\n", cmd);
+        if (handleRead() == -1) {
+            printf("Error handling READ command!\n");
+            return -1;
+        }
         return 0;
     } else if (strcasecmp(cmd, "del") == 0) {
-        printf("Command %s is valid!\n", cmd);
+        if (handleDel() == -1) {
+            printf("Error handling DEL command!\n");
+            return -1;
+        }
         return 0;
     } else if (strcasecmp(cmd, "quit") == 0) {
         // recv_buffer wieder auf "quit" setzen, um Schleife in recv_cmd() beenden zu können
@@ -247,37 +291,142 @@ int Server::handleSend() {
 // gibt -1 zurück, wenn ein Fehler aufgetreten ist
 //
 int Server::handleList() {
-    int mails;
+    int mails = 0;
+    char* user_dir_string = NULL;
+    char* number_mails_string = NULL;
+    char* result_string = NULL;
+    char* subjects_string = NULL;
+    char* subject = NULL;
 
+    // Abbrechen, falls kein user angegeben wurde
     if(cmd_string == NULL) {
         printf("LIST command is invalid!\n");
         return -1;
-    } else {
-        // Pfadstring für das Mailverzeichnis des Users erzeugen
-        char* user = strsep(&cmd_string, "\n");
-        char* user_dir_string = (char*) malloc((strlen(maildir) + strlen(user) + 2) * sizeof(char));
-        sprintf(user_dir_string, "%s/%s", maildir, user);
+    }
 
-        // Verzeichnis durchsuchen und Anzahl der Mails angeben
-        DIR* user_dir = opendir(user_dir_string);
-        if (errno == ENOENT) {
-            // Das Verzeichnis gibt es noch gar nicht --> noch keine Mails für diesen User
-            mails = 0;
-        } else if (user_dir) {
-            // In einer Schleife die Anzahl an Mails lesen
-            struct dirent *dirp;
-            do {
-                // Files im Verzeichnis lesen und (falls es ein File ist) zählen
-                dirp = readdir(user_dir);
-                if (dirp->d_type == DT_REG || dirp->d_type == DT_UNKNOWN) {
+    number_mails_string = (char*) malloc((strlen("Number of mails: \n") + sizeof(int)) * sizeof(char));
+
+    // Pfadstring für das Mailverzeichnis des Users erzeugen
+    char* user = strsep(&cmd_string, "\n");
+    user_dir_string = (char*) malloc((strlen(maildir) + strlen(user) + 2) * sizeof(char));
+    sprintf(user_dir_string, "%s/%s", maildir, user);
+
+    // Verzeichnis durchsuchen und Anzahl der Mails angeben
+    DIR* user_dir = opendir(user_dir_string);
+    if (errno == ENOENT) {
+        // Das Verzeichnis gibt es noch gar nicht --> noch keine Mails für diesen User
+        sprintf(number_mails_string, "Number of mails: %d\n", mails);
+        send_all(client_socket, number_mails_string, strlen(number_mails_string));
+    } else if (user_dir) {
+        // Für subjects_string wird 1 Byte alloziert, damit später strlen(subjects_string) nicht zu einem 
+        // Absturz führt 
+        char* subjects_string = (char*) malloc(sizeof(char));
+        subjects_string[0] = '\0';
+
+        // In einer Schleife die Anzahl an Mails lesen
+        struct dirent *dirp;
+
+        while ((dirp = readdir(user_dir)) != NULL) {
+            // mails inkrementieren falls es ein File ist
+            if (dirp->d_type == DT_REG || dirp->d_type == DT_UNKNOWN) {
+                if (readSubject(dirp, user_dir_string, &subject) != -1) {
                     mails++;
+                    subjects_string = (char*) realloc(subjects_string, (strlen(subjects_string) + strlen(subject) + 1) * sizeof(char));
+                    strcat(subjects_string, subject);
                 }
-            } while (dirp != NULL);
-        } else {
-            // Fehler
-            return -1;
+            }
         }
+        sprintf(number_mails_string, "Number of mails: %d\n", mails);
+
+        // Antwortstring erzeugen und an den Client senden
+        result_string = (char*) malloc((strlen(number_mails_string) + strlen(subjects_string) + 1) * sizeof(char));
+        sprintf(result_string, "%s%s", number_mails_string, subjects_string);
+        send_all(client_socket, result_string, strlen(result_string));
+    } else {
+        // Fehler
+        free(user_dir_string);
+        return -1;
     }
     
+    if (user_dir_string) {
+        free(user_dir_string);
+    }
+    if (number_mails_string) {
+        free(number_mails_string);
+    }
+    if (result_string) {
+        free(result_string);
+    }
+    if (subject) {
+        free(subject);
+    }
+    if (subjects_string) {
+        free(subjects_string);
+    }
+    return 0;
+}
+
+// int handleRead()
+// Kümmert sich um die Verarbeitung des Befehlsstrings, wenn es ein READ-Befehl ist
+// gibt -1 zurück, wenn ein Fehler aufgetreten ist
+//
+int Server::handleRead() {
+    if(cmd_string == NULL) {
+        printf("READ command is invalid!\n");
+        return -1;
+    } 
+
+    // Dateipfad erzeugen
+    char* user = strsep(&cmd_string, "\n");
+    char* file = strsep(&cmd_string, "\n");
+
+    char* file_path = (char*) malloc((strlen(maildir) + strlen(user) + strlen(file) + 3) * sizeof(char));
+    sprintf(file_path, "%s/%s/%s", maildir, user, file);
+
+    // File öffnen
+    FILE* fptr;
+    if ((fptr = fopen(file_path, "r")) == NULL) {
+        printf("Error opening mail\n");
+        free(file_path);
+        return -1;
+    }
+
+    // File auslesen
+    char* mail = NULL;
+    size_t mail_len;
+    getdelim(&mail, &mail_len, '\0', fptr);
+
+    fclose(fptr);
+
+    // Antwortstring an Client senden
+    send_all(client_socket, mail, strlen(mail));
+
+    free(file_path);
+    return 0;
+}
+
+// int handleDel()
+// Kümmert sich um die Verarbeitung des Befehlsstrings, wenn es ein DEL-Befehl ist
+// gibt -1 zurück, wenn ein Fehler aufgetreten ist
+//
+int Server::handleDel() {
+    if(cmd_string == NULL) {
+        printf("DEL command is invalid!\n");
+        return -1;
+    } 
+    
+    // Dateipfad erzeugen
+    char* user = strsep(&cmd_string, "\n");
+    char* file = strsep(&cmd_string, "\n");
+
+    char* file_path = (char*) malloc((strlen(maildir) + strlen(user) + strlen(file) + 3) * sizeof(char));
+    sprintf(file_path, "%s/%s/%s", maildir, user, file);
+
+    // File löschen
+    if (remove(file_path) == -1) {
+        free(file_path);
+        return -1;
+    }
+    free(file_path);
     return 0;
 }

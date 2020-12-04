@@ -37,6 +37,7 @@ class Server {
 
         int acceptClient();
         int parseCmd();
+        int readSubject(struct dirent *dirp, char* path, char** subject);
 
         // Handle Befehl Funktionen
         int handleSend();

@@ -50,7 +50,7 @@ int Server::init(int srv_port, char* mail_dir) {
 // 
 int Server::start() {
     // Auf Verbindungsanfragen von Clients hören
-    if (listen(listen_socket, 0) == -1) {
+    if (listen(listen_socket, 5) == -1) {
         return -1;
     }
 
@@ -64,9 +64,15 @@ int Server::start() {
         } 
 
         // Nachrichten vom Client empfangen bis die Verbindung getrennt wird
-        recv_cmd();
+        // recv_cmd();
 
-        close(client_socket);
+        /*for (int i = 0; i < threads.size(); i++) {
+            printf("hallo\n");
+            threads[i].join();
+            close(client_sockets[i]);
+        }*/
+
+        // close(client_socket);
     }
 
     return 0;
@@ -85,27 +91,36 @@ void Server::stop() {
 // 
 int Server::acceptClient() {
     // Verbindungsanfrage akzeptieren und Client-Adress-Struktur befüllen
-    client_socket = accept(listen_socket, (struct sockaddr *) &clt_addr_struct, &sock_addr_len);
+    client_sockets.push_back(accept(listen_socket, (struct sockaddr *) &clt_addr_struct, &sock_addr_len));
 
     // Thread erstellen und starten
-    
+    std::thread newThread(&Server::recv_cmd, this, client_sockets.back());
+    threads.push_back(std::move(newThread));
 
-    return client_socket;
+    return client_sockets.back();
 }
 
 // void send_msg(char* msg)
 // Sendet den String msg an den Client
 // gibt -1 zurück, wenn send() einen Fehler zurückgibt, ansonsten Anzahl der gesendeten Bytes
 // 
-void Server::send_msg(char* msg) {
+void Server::send_msg(int client_socket, char* msg) {
+    char* msg_length = (char*) malloc(sizeof(uint32_t));
+
+    uint32_t msg_size = strlen(msg);
+	sprintf(msg_length, "%d", msg_size);
+	send_all(client_socket, msg_length, sizeof(uint32_t));
+
     // Die übergebene Nachricht an den Client schicken
     send_all(client_socket, msg, strlen(msg));
+
+    free(msg_length);
 }
 
 // int recv_cmd()
 // Liest in einer Schleife die Nachrichten vom Client aus
 // 
-void Server::recv_cmd() {
+void Server::recv_cmd(int client_socket) {
     int msg_size;
     do {
         // Zuerst die Nachrichtenlänge in Bytes auslesen (32 Bit Zahl --> 4 Bytes)
@@ -127,16 +142,16 @@ void Server::recv_cmd() {
             cmd_string = recv_buffer;
 
             // Eingelesenen Befehlsstring parsen
-            if (parseCmd() == -1) {
+            if (parseCmd(client_socket) == -1) {
                 // Nachricht ERR an Client senden
-                send_msg(ERR_STRING);
+                send_msg(client_socket, ERR_STRING);
 
                 // cmd_string wieder auf recv_buffer setzen, das es sonst beim
                 // strncasecmp() zu einem Segmentation Fault kommen könnte wenn cmd_string NULL ist
                 cmd_string = recv_buffer;
             } else {
                 // Nachricht OK an Client senden
-                send_msg(OK_STRING);
+                send_msg(client_socket, OK_STRING);
             }
         } else if (msg_size == 0) {
            	printf("Client closed remote socket\n");
@@ -146,6 +161,9 @@ void Server::recv_cmd() {
         } 
 
     } while (strncasecmp(cmd_string, "quit", 4) != 0 || msg_size == 0);
+
+    // Socket schließen
+    close(client_socket);
 }
 
 
@@ -189,7 +207,9 @@ int Server::readSubject(struct dirent *dirp, char* path , char** subject) {
 // Liest den Befehl aus dem empfangenen String aus
 // gibt -1 zurück, wenn ein Fehler aufgetreten ist 
 //
-int Server::parseCmd() {
+int Server::parseCmd(int client_socket) {
+        printf("parseCmd\n");
+
     // String bei Newline spalten und Befehl auslesen
     char* cmd = strsep(&cmd_string, "\n");
 
@@ -201,13 +221,13 @@ int Server::parseCmd() {
         }
         return 0;
     } else if (strcasecmp(cmd, "list") == 0) {
-        if (handleList() == -1) {
+        if (handleList(client_socket) == -1) {
             printf("Error handling LIST command!\n");
             return -1;
         }
         return 0;
     } else if (strcasecmp(cmd, "read") == 0) {
-        if (handleRead() == -1) {
+        if (handleRead(client_socket) == -1) {
             printf("Error handling READ command!\n");
             return -1;
         }
@@ -295,13 +315,15 @@ int Server::handleSend() {
 // Kümmert sich um die Verarbeitung des Befehlsstrings, wenn es ein LIST-Befehl ist
 // gibt -1 zurück, wenn ein Fehler aufgetreten ist
 //
-int Server::handleList() {
+int Server::handleList(int client_socket) {
     int mails = 0;
     char* user_dir_string = NULL;
     char* number_mails_string = NULL;
     char* result_string = NULL;
     char* subjects_string = NULL;
     char* subject = NULL;
+
+    printf("%s", cmd_string);
 
     // Abbrechen, falls kein user angegeben wurde
     if(cmd_string == NULL) {
@@ -321,7 +343,7 @@ int Server::handleList() {
     if (errno == ENOENT) {
         // Das Verzeichnis gibt es noch gar nicht --> noch keine Mails für diesen User
         sprintf(number_mails_string, "Number of mails: %d\n", mails);
-        send_msg(number_mails_string);
+        send_msg(client_socket, number_mails_string);
     } else if (user_dir) {
         // Für subjects_string wird 1 Byte alloziert, damit später strlen(subjects_string) nicht zu einem 
         // Absturz führt 
@@ -346,7 +368,7 @@ int Server::handleList() {
         // Antwortstring erzeugen und an den Client senden
         result_string = (char*) malloc((strlen(number_mails_string) + strlen(subjects_string) + 1) * sizeof(char));
         sprintf(result_string, "%s%s", number_mails_string, subjects_string);
-        send_msg(result_string);
+        send_msg(client_socket, result_string);
     } else {
         // Fehler
         free(user_dir_string);
@@ -375,7 +397,8 @@ int Server::handleList() {
 // Kümmert sich um die Verarbeitung des Befehlsstrings, wenn es ein READ-Befehl ist
 // gibt -1 zurück, wenn ein Fehler aufgetreten ist
 //
-int Server::handleRead() {
+int Server::handleRead(int client_socket) {
+    printf("%s", cmd_string);
     if(cmd_string == NULL) {
         printf("READ command is invalid!\n");
         return -1;
@@ -405,7 +428,7 @@ int Server::handleRead() {
     fclose(fptr);
 
     // Antwortstring an Client senden
-    send_msg(mail);
+    send_msg(client_socket, mail);
 
     free(mail);
     free(file_path);
@@ -443,6 +466,7 @@ int Server::handleDel() {
 // gibt -1 zurück, wenn ein Fehler aufgetreten ist
 //
 int Server::handleLogin() {
+    printf("handleLogin\n");
     if(cmd_string == NULL) {
         printf("LOGIN command is invalid!\n");
         return -1;

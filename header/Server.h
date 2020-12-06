@@ -12,7 +12,8 @@
 #include <dirent.h>
 #include <errno.h>
 #include <ldap.h>
-#include <pthread.h>
+#include <thread>
+#include <vector>
 
 
 #include "Mail.h"
@@ -23,13 +24,15 @@
 class Server {
     private:
         // Membervariablen
+        std::vector<std::thread> threads;
         char* maildir;
         char* recv_buffer;
         char* cmd_string;
         int buffer_size;
 
         // Membervariablen -- Sockets
-        int listen_socket, client_socket;
+        int listen_socket;
+        std::vector<int> client_sockets;
         struct sockaddr_in srv_addr_struct, clt_addr_struct;
         socklen_t sock_addr_len;
 
@@ -43,13 +46,13 @@ class Server {
         const char* ldapSearchResultAttributes[5] = {"uid", "cn", nullptr};
 
         int acceptClient();
-        int parseCmd();
+        int parseCmd(int client_socket);
         int readSubject(struct dirent *dirp, char* path, char** subject);
 
         // Handle Befehl Funktionen
         int handleSend();
-        int handleList();
-        int handleRead();
+        int handleList(int client_socket);
+        int handleRead(int client_socket);
         int handleDel();
         int handleLogin();
     public:
@@ -66,8 +69,8 @@ class Server {
         int LDAP_search(char* userID);
         int LDAP_bind(char* userID, char* passwort, bool isServer);
 
-        void send_msg(char* msg);
-        void recv_cmd();
+        void send_msg(int client_socket, char* msg);
+        void recv_cmd(int client_socket);
 };
 
 #endif

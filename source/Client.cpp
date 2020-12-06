@@ -113,6 +113,10 @@ void Client::send_cmd() {
 				send_all(client_socket, cmd, strlen(cmd));
 
 				// Antwort vom Server empfangen
+				// 2 bei READ und LIST ansonsten nur einmal
+				if (strcasecmp(cmd_input, "read\n") == 0 || strcasecmp(cmd_input, "list\n") == 0) {
+					receive(cmd_input);
+				}
 				receive(cmd_input);
 
 
@@ -139,8 +143,12 @@ void Client::send_cmd() {
 int Client::receive(char* cmd) {
     int size;
 
+	// Zuerst die Nachrichtenlänge in Bytes auslesen (32 Bit Zahl --> 4 Bytes)
+    recv_all(client_socket, recv_buffer, HEADER_BYTES);
+    size = atoi(recv_buffer);
+
     // Nachricht vom Socket auslesen
-    size = recv(client_socket, recv_buffer, BUF - 1, 0);
+    recv_all(client_socket, recv_buffer, size);
 
     if (size > 0) {
         recv_buffer[size]= '\0';

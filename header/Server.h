@@ -11,16 +11,14 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <errno.h>
+#include <ldap.h>
+#include <pthread.h>
+
 
 #include "Mail.h"
 #include "../util/util.h"
 
-#define BUF 5
-#define HEADER_BYTES 4
-#define MAX_USERID_SIZE 8
-#define MAX_SUBJECT_SIZE 80
-#define OK_STRING "OK\n"
-#define ERR_STRING "ERR\n"
+#define BUF 128
 
 class Server {
     private:
@@ -35,6 +33,15 @@ class Server {
         struct sockaddr_in srv_addr_struct, clt_addr_struct;
         socklen_t sock_addr_len;
 
+        //LDAP Variablen
+        const char* ldapUri = "ldap://ldap.technikum-wien.at:389";
+        const int ldapVersion = LDAP_VERSION3;
+        char ldapBindUser[BUF*2];
+        char ldapBindPassword[BUF*2];
+        const char* ldapSearchBaseDomainComponent = "dc=technikum-wien,dc=at";
+        ber_int_t ldapSearchScope = LDAP_SCOPE_SUBTREE;
+        const char* ldapSearchResultAttributes[5] = {"uid", "cn", nullptr};
+
         int acceptClient();
         int parseCmd();
         int readSubject(struct dirent *dirp, char* path, char** subject);
@@ -44,6 +51,7 @@ class Server {
         int handleList();
         int handleRead();
         int handleDel();
+        int handleLogin();
     public:
         // Konstruktor und Destruktor
         Server();
@@ -52,6 +60,11 @@ class Server {
         int init(int server_port, char* maildir);
         int start();
         void stop();
+
+        //LDAP Funktionen
+        int LDPA_load_Creds();
+        int LDAP_search(char* userID);
+        int LDAP_bind(char* userID, char* passwort, bool isServer);
 
         void send_msg(char* msg);
         void recv_cmd();

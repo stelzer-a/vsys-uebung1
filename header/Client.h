@@ -12,6 +12,7 @@
 #include "../util/util.h"
 
 #define BUF 1024
+#define ERR_USER "xxxxxxxxxxxx"
 
 class Client {
     private:
@@ -23,7 +24,7 @@ class Client {
         int readCmd(char* cmd);
 
         char* userid;
-        char* pw;
+        char pw[BUF/4];
 
     public:
         // Konstruktor und Destruktor
@@ -37,7 +38,7 @@ class Client {
         int disconnect();
 
         void send_cmd();
-        int receive();
+        int receive(char* cmd);
 
 };
 

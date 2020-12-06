@@ -72,8 +72,18 @@ int main (int argc, char* argv[]) {
 	Server server;
 	server.init(server_port, maildir_arg);
 
-	server.start();
+	//---------------- LDAP START ---------------- 
 
+	//LDAP_load_Creds
+	if (server.LDPA_load_Creds() == 0)
+	{
+		printf("LDAP Credentials load successfully!\n");
+	}
+	else{ printf("faild to load LDAP Creds");}
+
+	//---------------- LDAP END ---------------- 
+
+	server.start();
 	server.stop();
 	
   	return EXIT_SUCCESS;

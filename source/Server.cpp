@@ -61,11 +61,7 @@ int Server::start() {
         // Neue Verbindungsanfragen akzeptieren
         if (acceptClient() == -1) {
             printf("A client could not connect to the server\n");
-        } else {
-            // Willkommensnachricht an den Client schicken
-            printf("Client connected from %s:%d\n", inet_ntoa(clt_addr_struct.sin_addr), ntohs(clt_addr_struct.sin_port));
-            send_msg("Willkommen bei twmailer!\n\n");
-        }
+        } 
 
         // Nachrichten vom Client empfangen bis die Verbindung getrennt wird
         recv_cmd();
@@ -90,6 +86,9 @@ void Server::stop() {
 int Server::acceptClient() {
     // Verbindungsanfrage akzeptieren und Client-Adress-Struktur befüllen
     client_socket = accept(listen_socket, (struct sockaddr *) &clt_addr_struct, &sock_addr_len);
+
+    // Thread erstellen und starten
+    
 
     return client_socket;
 }
@@ -130,14 +129,14 @@ void Server::recv_cmd() {
             // Eingelesenen Befehlsstring parsen
             if (parseCmd() == -1) {
                 // Nachricht ERR an Client senden
-                send_all(client_socket, ERR_STRING, strlen(ERR_STRING));
+                send_msg(ERR_STRING);
 
                 // cmd_string wieder auf recv_buffer setzen, das es sonst beim
                 // strncasecmp() zu einem Segmentation Fault kommen könnte wenn cmd_string NULL ist
                 cmd_string = recv_buffer;
             } else {
                 // Nachricht OK an Client senden
-                send_all(client_socket, OK_STRING, strlen(OK_STRING));
+                send_msg(OK_STRING);
             }
         } else if (msg_size == 0) {
            	printf("Client closed remote socket\n");
@@ -223,7 +222,13 @@ int Server::parseCmd() {
         // recv_buffer wieder auf "quit" setzen, um Schleife in recv_cmd() beenden zu können
         strcpy(cmd_string, "quit");
         return 0;
-    } else {
+    } else if (strcasecmp(cmd, "login") == 0) {
+        if (handleLogin() == -1) {
+            printf("Error handling LOGIN command!\n");
+            return -1;
+        }
+        return 0;
+    }  else {
         printf("Command %s is invalid!\n", cmd);
         return -1;
     }
@@ -316,7 +321,7 @@ int Server::handleList() {
     if (errno == ENOENT) {
         // Das Verzeichnis gibt es noch gar nicht --> noch keine Mails für diesen User
         sprintf(number_mails_string, "Number of mails: %d\n", mails);
-        send_all(client_socket, number_mails_string, strlen(number_mails_string));
+        send_msg(number_mails_string);
     } else if (user_dir) {
         // Für subjects_string wird 1 Byte alloziert, damit später strlen(subjects_string) nicht zu einem 
         // Absturz führt 
@@ -341,7 +346,7 @@ int Server::handleList() {
         // Antwortstring erzeugen und an den Client senden
         result_string = (char*) malloc((strlen(number_mails_string) + strlen(subjects_string) + 1) * sizeof(char));
         sprintf(result_string, "%s%s", number_mails_string, subjects_string);
-        send_all(client_socket, result_string, strlen(result_string));
+        send_msg(result_string);
     } else {
         // Fehler
         free(user_dir_string);
@@ -395,12 +400,14 @@ int Server::handleRead() {
     char* mail = NULL;
     size_t mail_len;
     getdelim(&mail, &mail_len, '\0', fptr);
+    mail[strlen(mail)] = '\0';
 
     fclose(fptr);
 
     // Antwortstring an Client senden
-    send_all(client_socket, mail, strlen(mail));
+    send_msg(mail);
 
+    free(mail);
     free(file_path);
     return 0;
 }
@@ -428,5 +435,260 @@ int Server::handleDel() {
         return -1;
     }
     free(file_path);
+    return 0;
+}
+
+// int handleLogin()
+// Kümmert sich um die Verarbeitung des Befehlsstrings, wenn es ein LOGIN-Befehl ist
+// gibt -1 zurück, wenn ein Fehler aufgetreten ist
+//
+int Server::handleLogin() {
+    if(cmd_string == NULL) {
+        printf("LOGIN command is invalid!\n");
+        return -1;
+    } 
+    
+    // User und Passwort vom String spalten
+    char* userid = strsep(&cmd_string, "\n");
+    char* passwort = strsep(&cmd_string, "\n");
+
+    // LDAP aufrufen
+    if (LDAP_search(userid) == 0) {
+         LDAP_bind(userid, passwort, false);
+    }
+
+    return 0;
+}
+
+//
+// --------------------------------------------------------------------------------------------------------------------------
+//
+
+//laedt credentials für LDAPSearch und speichert Sie (privat) im Server Object 
+//(Passwort in Konsole nicht lesbar)
+int Server::LDPA_load_Creds()
+{
+
+    std::string username;
+    char* rawLdapUsername = NULL;
+    do {
+        // read username for LDAP search
+        printf("Please insert Username for LDAP-search: ");
+        getline(std::cin, username);
+        rawLdapUsername = (char*) username.c_str();
+        sprintf(ldapBindUser, "uid=%s,ou=people,dc=technikum-wien,dc=at", rawLdapUsername);
+
+        // read password for LDAP Search (Passwort in Konsole nicht lesbar)
+        strcpy(ldapBindPassword, getpass());
+    } while (LDAP_bind(ldapBindUser, ldapBindPassword, true) == -1);
+    
+    return 0;
+}
+
+//nimmmt die am Server hinterlegten Credentials und meldet sich damit am LDAP an
+//und sucht nach der übergebenen UserID.
+int Server::LDAP_search(char* userID)
+{
+    int rc;
+    char prefix[13] = {"uid="};
+    char* ldapSearchFilter= {strcat(prefix, userID)};
+    LDAP* ldapHandle;
+
+    // LDAP initialisieren
+    rc = ldap_initialize(&ldapHandle, ldapUri);
+    if (rc != LDAP_SUCCESS)
+    {
+        std::cout << "ldap_init failed!\n";
+        return -1;
+    } 
+
+    // Optionen für LDAP einstellen
+    rc = ldap_set_option(ldapHandle, LDAP_OPT_PROTOCOL_VERSION, &ldapVersion);
+    if (rc != LDAP_OPT_SUCCESS) 
+    {
+        ldap_unbind_ext_s(ldapHandle, nullptr,nullptr);
+        std::cout << "\nset option failed!\n";
+        return -1;
+    }
+
+    // TLS-Verbindung starten
+    rc = ldap_start_tls_s(
+        ldapHandle,
+        nullptr,
+        nullptr
+    );
+
+    if (rc != LDAP_SUCCESS) 
+    {
+        ldap_unbind_ext_s(ldapHandle, nullptr,nullptr);
+        std::cout << "\nstart tls failed!\n";
+        return -1;
+    }
+
+    // Authentifizierungsprotokoll SASL nutzen
+    BerValue bindCredentials;
+    bindCredentials.bv_val = ldapBindPassword;
+    bindCredentials.bv_len = strlen(ldapBindPassword);
+    BerValue *servercredp; // server's credentials
+    rc = ldap_sasl_bind_s(
+
+        ldapHandle,
+        ldapBindUser,
+        LDAP_SASL_SIMPLE,
+        &bindCredentials,
+        NULL,
+        NULL,
+        &servercredp);
+
+    if (rc !=  LDAP_SUCCESS)
+    {
+        ldap_unbind_ext_s(ldapHandle, nullptr, nullptr);
+        std::cout << "\nsasl_bind failed!\n";
+        return -1;
+    }
+
+    // perform ldap search
+    LDAPMessage *searchResult;
+    rc = ldap_search_ext_s(
+        ldapHandle,
+        ldapSearchBaseDomainComponent,
+        ldapSearchScope,
+        ldapSearchFilter,
+        (char **)ldapSearchResultAttributes,
+        0,
+        NULL,
+        NULL,
+        NULL,
+        500,
+        &searchResult);
+
+    if (rc != LDAP_SUCCESS)
+    {
+        ldap_unbind_ext_s(ldapHandle, NULL, NULL);
+        std::cout << "\nldap search failed!\n";
+        return -1; 
+    }
+
+    // Einträge anzeigen
+    printf("Total results: %d\n", ldap_count_entries(ldapHandle, searchResult));
+
+    if (ldap_count_entries(ldapHandle, searchResult) != 1) {
+        printf("No user was found!\n");
+        return -1;
+    } 
+
+    // get result of search
+    LDAPMessage *searchResultEntry;
+    for (searchResultEntry = ldap_first_entry(ldapHandle, searchResult);
+        searchResultEntry != NULL;
+        searchResultEntry = ldap_next_entry(ldapHandle, searchResultEntry))
+    {
+        // Base Information of the search result entry
+        printf("DN: %s\n", ldap_get_dn(ldapHandle, searchResultEntry));
+
+        BerElement *ber;
+        char *searchResultEntryAttribute;
+        for (searchResultEntryAttribute = ldap_first_attribute(ldapHandle, searchResultEntry, &ber);
+            searchResultEntryAttribute != NULL;
+            searchResultEntryAttribute = ldap_next_attribute(ldapHandle, searchResultEntry, ber))
+        {
+            BerValue **vals;
+            if ((vals = ldap_get_values_len(ldapHandle, searchResultEntry, searchResultEntryAttribute)) != NULL)
+            {
+            for (int i = 0; i < ldap_count_values_len(vals); i++)
+            {
+                printf("\t%s: %s\n", searchResultEntryAttribute, vals[i]->bv_val);
+            }
+            ldap_value_free_len(vals);
+            }
+
+            // free memory
+            ldap_memfree(searchResultEntryAttribute);
+        }
+        // free memory
+        if (ber != NULL)
+        {
+            ber_free(ber, 0);
+        }
+
+        printf("\n");
+    }
+
+    // free memory
+    ldap_msgfree(searchResult);
+    ldap_unbind_ext_s(ldapHandle, NULL, NULL);
+
+    return 0;
+}
+
+//nimmmt die an die Funktion übergebenen Credentials und macht 
+//damit am LDAP ein bind - gibt jeweils true or false retour
+int Server::LDAP_bind(char* userID, char* passwort, bool isServer)
+{
+    int rc;
+    char* ldapUser;
+    if (!isServer) {
+        char prefix[47] = {"uid="};
+        char* subfix = ",ou=people,dc=technikum-wien,dc=at";
+        char* temp = strcat(prefix, userID); 
+        ldapUser = strcat(temp, subfix);
+    } else {
+        ldapUser = userID;
+    }
+    LDAP* ldapHandle;
+    
+    rc = ldap_initialize(&ldapHandle, ldapUri);
+    if (rc != LDAP_SUCCESS)
+    {
+        std::cout << "ldap_init failed!\n";
+        return -1;
+    }
+
+    rc = ldap_set_option(
+        ldapHandle,
+        LDAP_OPT_PROTOCOL_VERSION,
+        &ldapVersion);
+    if (rc != LDAP_OPT_SUCCESS) 
+    {
+        ldap_unbind_ext_s(ldapHandle, nullptr, nullptr);
+        std::cout << "\nset option failed!\n";
+        return -1;
+    }
+
+    rc = ldap_start_tls_s(
+        ldapHandle,
+        nullptr,
+        nullptr
+    );
+
+    if (rc != LDAP_SUCCESS) 
+    {
+        ldap_unbind_ext_s(ldapHandle, nullptr,nullptr);
+        std::cout << "\nstart tls failed!\n";
+        return -1;
+
+    }
+
+    BerValue bindCredentials;
+    bindCredentials.bv_val = passwort;
+    bindCredentials.bv_len = strlen(passwort);
+    BerValue *servercredp; // server's credentials
+    rc = ldap_sasl_bind_s(
+        ldapHandle,
+        ldapUser,
+        LDAP_SASL_SIMPLE,
+        &bindCredentials,
+        NULL,
+        NULL,
+        &servercredp);
+
+    if (rc !=  LDAP_SUCCESS)
+    {
+        ldap_unbind_ext_s(ldapHandle, nullptr, nullptr);
+        std::cout << rc;
+        return -1;
+    }
+
+    ldap_unbind_ext_s(ldapHandle, nullptr, nullptr);
     return 0;
 }

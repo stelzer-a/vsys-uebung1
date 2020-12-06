@@ -8,8 +8,6 @@ Mail::Mail(char* _sender, char* _recipient, char* _subject, char* _content) {
     recipient = _recipient;
     subject = _subject;
     content = _content;
-
-    srand((unsigned) time(NULL));
 }
 
 // void displayValues()
@@ -64,9 +62,10 @@ int Mail::saveToMaildir(char* maildir) {
 // 
 int Mail::saveMail(char* dirString) {
     // ID und Pfadstring für das File erzeugen
-    id = rand();
-    char* filename = (char*) malloc((strlen(dirString) + sizeof(int) + 1) * sizeof(char));
-    sprintf(filename, "%s/%d", dirString, id);
+    id = (char*) malloc(UUID_SIZE * sizeof(char));
+    generate_UUID(id);
+    char* filename = (char*) malloc((strlen(dirString) + strlen(id) + 1) * sizeof(char));
+    sprintf(filename, "%s/%s", dirString, id);
     filename[strlen(filename)] = '\0';
 
     // File erstellen
@@ -79,11 +78,27 @@ int Mail::saveMail(char* dirString) {
         fprintf(newFile, "%s", content);
     } else {
         printf("Mail could not be saved!\n");
+        free(id);
         free(filename);
         return -1;
     }
 
-    fclose(newFile);   
+    fclose(newFile);
+    free(id);   
     free(filename);
     return 0;
+}
+
+//erzeut eine UUID und gibt diese als String retour.
+void Mail::generate_UUID(char* id)
+{
+    uuid_t binuuid; //binaryUUID
+    //char uuid[37]; //laenge einer UUID (36-byte string + tailing \0)
+
+    uuid_generate_random(binuuid); //generate binary UUID
+    uuid_unparse_lower(binuuid, id); //converts binary UUID to string
+    printf("%s\n", id);
+
+    //return uuidStr.c_str();
+    //return uuid;
 }

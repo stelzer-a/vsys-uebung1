@@ -1,5 +1,4 @@
 #include "../header/Client.h"
-#include "../util/mypw.h"
 
 // Konstruktor
 // initialisiert Socket-Deskriptor und receive-Buffer
@@ -7,14 +6,18 @@
 Client::Client() {
     client_socket = -1;
     recv_buffer = (char*) malloc(BUF * sizeof(char));
+	userid = NULL;
 }
 
 // Destruktor
-// gibt den für receive-Buffer allozierten Speicher wieder frei
+// gibt allozierten Speicher wieder frei
 // 
 Client::~Client() {
-    if (recv_buffer != NULL) {
+    if (recv_buffer) {
         free(recv_buffer);
+    }
+	if (userid) {
+        free(userid);
     }
 }
 
@@ -62,63 +65,78 @@ void Client::send_cmd() {
 	char* line = NULL;
 	size_t cmd_len = BUF * sizeof(char);
 	char* cmd = (char*) malloc(cmd_len);
+	char* cmd_input = (char*) malloc(cmd_len);
 	char* msg_length = (char*) malloc(sizeof(uint32_t));
-	bool end_read = false;
 
     // Es können solange Befehle eingegeben werden, bis "quit\n.\n" eingegeben wird
-    do {
+    while (strcasecmp(cmd_input, "quit\n")) {
         // Eingegebenen Befehl auslesen 
 		printf("\nEnter your command below:\n");
 
 		// Befehlszeile auslesen und auf Gültigkeit überprüfen
 		getline(&cmd, &cmd_len, stdin);
+		cmd_input = (char*) realloc(cmd_input, (strlen(cmd) + 1) * sizeof(char));
+		strcpy(cmd_input, cmd);
 
-		if (strcasecmp(cmd, "send\n") != 0 && strcasecmp(cmd, "list\n") != 0 && strcasecmp(cmd, "read\n") != 0 &&
-			strcasecmp(cmd, "del\n") != 0 && strcasecmp(cmd, "quit\n") != 0 && strcasecmp(cmd, "login\n") != 0) {
+		/* Prüfen, ob sich der User bereits eingeloggt hat
+		if(userid == NULL && strcasecmp(cmd, "login\n") != 0) {
+			printf("\nYou are not logged in yet!\n");
+		} else { */
+			if (strcasecmp(cmd, "send\n") != 0 && strcasecmp(cmd, "list\n") != 0 && strcasecmp(cmd, "read\n") != 0 &&
+				strcasecmp(cmd, "del\n") != 0 && strcasecmp(cmd, "quit\n") != 0 && strcasecmp(cmd, "login\n") != 0) {
 
-			printf("%s ist not a valid command!\n", cmd);
-		} else {
+				printf("%s ist not a valid command!\n", cmd);
+			} else {
 
-			readCmd(cmd);
+				// Userid an Befehl anhängen
+				// falls der User sich noch nicht angemeldet hat wird ein 
+				// String angehängt, der länger als 8 Zeichen ist, damit der Server es als Fehler erkennt
+				if (strcasecmp(cmd, "login\n") != 0) {
+					if (userid == NULL) {
+						strcat(cmd, ERR_USER);
+					} else {
+						strcat(cmd, userid);
+					}
+				}
 
-			// Befehlsstring nullterminieren
-			cmd[strlen(cmd)+1] = '\0';
+				readCmd(cmd);
 
-			// Länge des Befehlsstrings an den Server senden
-			uint32_t msg_size = strlen(cmd);
+				// Befehlsstring nullterminieren
+				cmd[strlen(cmd)+1] = '\0';
 
-			sprintf(msg_length, "%d", msg_size);
+				// Länge des Befehlsstrings an den Server senden
+				uint32_t msg_size = strlen(cmd);
+				sprintf(msg_length, "%d", msg_size);
+				send_all(client_socket, msg_length, sizeof(uint32_t));
 
-			// send(client_socket, msg_length, sizeof(uint32_t), 0);
-			send_all(client_socket, msg_length, sizeof(uint32_t));
+				// Befehlsstring an den Server senden
+				send_all(client_socket, cmd, strlen(cmd));
 
-			// Befehlsstring an den Server senden
-			// send(client_socket, cmd, strlen(cmd), 0);
-			send_all(client_socket, cmd, strlen(cmd));
+				// Antwort vom Server empfangen
+				receive(cmd_input);
 
-			// Antwort vom Server empfangen
-			receive();
 
-			// Befehlsstring zurücksetzen
-			if (strncasecmp(cmd, "quit", 4) != 0) {
-				// cmd-String zurücksetzen
-				memset(cmd, 0, strlen(cmd));
+				// Befehlsstring zurücksetzen
+				if (strncasecmp(cmd, "quit", 4) != 0) {
+					memset(cmd, 0, strlen(cmd));
+				}
 			}
-		}
+		//}
 
-    } while (strncmp(cmd, "quit", 4));
+    }
 
     // Allozierten Speicher freigeben
 	free(line);
 	free(cmd);
 	free(msg_length);
+	free(cmd_input);
 }
 
-// int receive()
+// int receive(Befehl)
 // Liest eine Nachricht aus dem Socket aus und gibt sie auf der Konsole aus
 // gibt -1 zurück, wenn keine Nachricht empfangen werden kann 
 // 
-int Client::receive() {
+int Client::receive(char* cmd) {
     int size;
 
     // Nachricht vom Socket auslesen
@@ -126,14 +144,19 @@ int Client::receive() {
 
     if (size > 0) {
         recv_buffer[size]= '\0';
-        printf("%s", recv_buffer);
+		printf("%s", recv_buffer);
+
+		if (strcasecmp(recv_buffer, ERR_STRING) == 0 && strcasecmp(cmd, "login\n") == 0) {
+			free(userid);
+			userid == NULL;
+		}
         return 0;
   	} else {
      	return -1;
   	}
 }
 
-// int receive(Buffer)
+// int readCmd(Buffer)
 // Liest den vollständigen Befehl von der Konsole aus
 // gibt -1 zurück, wenn ein Fehler auftritt
 // 
@@ -142,7 +165,7 @@ int Client::readCmd(char* cmd) {
 	size_t line_len;
 
     // Je nach Befehl wird das Lesen von der Konsole anders beendet
-	if (strcasecmp(cmd, "send\n") == 0) {
+	if (strncasecmp(cmd, "send\n", 5) == 0) {
 		// Befehl Zeile für Zeile auslesen bis ein ".\n" kommt
 		do {
 			getline(&line, &line_len, stdin);
@@ -156,27 +179,28 @@ int Client::readCmd(char* cmd) {
 		} while (strcmp(line, ".\n") != 0);
 	} else if (strcasecmp(cmd, "login\n") == 0) {
 		// Zuerst userid abfragen
-		userid = (char*) malloc(128);
-		pw = (char*) malloc(256);
-		size_t userid_len = 127;
+		userid = (char*) malloc(BUF/8);
+		size_t userid_len = BUF/8 - 1;
+		printf("User: ");
 		getline(&userid, &userid_len, stdin);
+		strcat(cmd, userid);
 
 		// Dann Passwort abfragen
 		strcpy(pw, getpass());
-		printf("User: %s - %s", userid, pw);
+		strcat(cmd, pw);
+		cmd[strlen(cmd)] = '\n';
+		cmd[strlen(cmd)] = '\0';
 
-		free(userid);
-		free(pw);
 	} else {
 		int count_lines;
 
 		// Je nach Befehl bestimmte Anzahl an Zeilen noch auslesen
-		if (strcasecmp(cmd, "list\n") == 0) {
-			count_lines = 1;
-		} else if (strcasecmp(cmd, "quit\n") == 0) {
+		if (strncasecmp(cmd, "list\n", 5) == 0 || strncasecmp(cmd, "quit\n", 5) == 0) {
 			count_lines = 0;
-		} else {
+		} else if (strcasecmp(cmd, "login\n") == 0) {
 			count_lines = 2;
+		} else {
+			count_lines = 1;
 		}
 
 		while (count_lines) {
@@ -192,7 +216,7 @@ int Client::readCmd(char* cmd) {
 		}
 	}
 
-	if(line != NULL) {
+	if(line) {
 		free(line);
 	}
 	return 0;

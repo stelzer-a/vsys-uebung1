@@ -7,14 +7,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <time.h>
+#include <uuid/uuid.h>
+#include <string>
+#include <iostream>
+
+#define UUID_SIZE 37
 
 class Mail {
     private:
-        int id;
+        char* id;
         char *sender, *recipient, *subject, *content;
         
         int saveMail(char* dirString);
+
+        //UUID
+        void generate_UUID(char* id);
     public:
         Mail(char* _sender, char* _recipient, char* _subject, char* _content);
 

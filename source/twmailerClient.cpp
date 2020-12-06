@@ -56,13 +56,8 @@ int main (int argc, char *argv[]) {
 	if ((client.connectToServer()) == -1) {
 		perror("Connect error - no server available");
      	return EXIT_FAILURE;
-	} else {
-		printf("Connection with server established\n");
-		if ((client.receive()) == -1) {
-			perror("Error receiving message\n");
-		}
-	}
-
+	} 
+	
 	// Kommandoeingabe-Schleife beginnen
 	client.send_cmd();
 

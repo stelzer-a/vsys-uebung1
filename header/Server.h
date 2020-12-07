@@ -15,7 +15,6 @@
 #include <thread>
 #include <vector>
 
-
 #include "Mail.h"
 #include "../util/util.h"
 

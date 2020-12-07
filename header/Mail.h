@@ -11,7 +11,7 @@
 #include <string>
 #include <iostream>
 
-#define UUID_SIZE 37
+#define UUID_SIZE 37 //laenge einer UUID (36-byte string + tailing \0)
 
 class Mail {
     private:

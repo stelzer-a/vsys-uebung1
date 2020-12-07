@@ -89,16 +89,11 @@ int Mail::saveMail(char* dirString) {
     return 0;
 }
 
-//erzeut eine UUID und gibt diese als String retour.
+//erzeut eine UUID und schreibt diese in den mitgegeben c-String.
 void Mail::generate_UUID(char* id)
 {
     uuid_t binuuid; //binaryUUID
-    //char uuid[37]; //laenge einer UUID (36-byte string + tailing \0)
-
     uuid_generate_random(binuuid); //generate binary UUID
     uuid_unparse_lower(binuuid, id); //converts binary UUID to string
-    printf("%s\n", id);
-
-    //return uuidStr.c_str();
-    //return uuid;
+    //printf("%s\n", id);
 }

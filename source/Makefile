@@ -1,10 +1,9 @@
 CC=g++
-CFLAGS=-g -O -std=c++2a -pthread
+CFLAGS=-g -O -std=c++2a -pthread -w
 LIBS=-lldap -llber -luuid
 
 rebuild: clean all
 all: twmailerClient twmailerServer
-
 clean:
 	rm twmailerServer
 	rm twmailerServer.o

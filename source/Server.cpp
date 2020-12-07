@@ -63,6 +63,8 @@ int Server::start() {
             printf("A client could not connect to the server\n");
         } 
 
+        printf("client connected..\n");
+
         // Nachrichten vom Client empfangen bis die Verbindung getrennt wird
         // recv_cmd();
 
@@ -208,7 +210,6 @@ int Server::readSubject(struct dirent *dirp, char* path , char** subject) {
 // gibt -1 zurück, wenn ein Fehler aufgetreten ist 
 //
 int Server::parseCmd(int client_socket) {
-        printf("parseCmd\n");
 
     // String bei Newline spalten und Befehl auslesen
     char* cmd = strsep(&cmd_string, "\n");
@@ -322,8 +323,6 @@ int Server::handleList(int client_socket) {
     char* result_string = NULL;
     char* subjects_string = NULL;
     char* subject = NULL;
-
-    printf("%s", cmd_string);
 
     // Abbrechen, falls kein user angegeben wurde
     if(cmd_string == NULL) {
@@ -466,7 +465,6 @@ int Server::handleDel() {
 // gibt -1 zurück, wenn ein Fehler aufgetreten ist
 //
 int Server::handleLogin() {
-    printf("handleLogin\n");
     if(cmd_string == NULL) {
         printf("LOGIN command is invalid!\n");
         return -1;
@@ -646,7 +644,7 @@ int Server::LDAP_search(char* userID)
 }
 
 //nimmmt die an die Funktion übergebenen Credentials und macht 
-//damit am LDAP ein bind - gibt jeweils true or false retour
+//damit am LDAP ein bind - gibt jeweils 0 or -1 retour
 int Server::LDAP_bind(char* userID, char* passwort, bool isServer)
 {
     int rc;
